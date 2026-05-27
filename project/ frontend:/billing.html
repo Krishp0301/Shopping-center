@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing Mode - Shop POS</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">🛒 Shop POS - Billing</div>
+        <div class="nav-user">
+            <span id="user-name"></span>
+            <button onclick="logout()" class="btn-secondary">Logout</button>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="main-content">
+            <div class="section">
+                <h2><i class="fas fa-search"></i> Search Items</h2>
+                <div class="search-box">
+                    <input type="text" id="search-item" placeholder="Search item name..." onkeyup="searchItems()">
+                    <button onclick="searchItems()" class="btn-primary">Search</button>
+                </div>
+                <div id="search-results" class="item-list"></div>
+            </div>
+            
+            <div class="section">
+                <h2><i class="fas fa-file-invoice"></i> Current Bill</h2>
+                <table class="bill-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>Qty</th>
+                            <th>Total</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bill-items"></tbody>
+                </table>
+                <div class="bill-summary">
+                    <h3>Total: ₹<span id="bill-total">0</span></h3>
+                    <select id="payment-method">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="upi">UPI</option>
+                    </select>
+                    <button onclick="submitBill()" class="btn-success">Complete Bill</button>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2><i class="fas fa-history"></i> Bill History</h2>
+                <div class="search-box">
+                    <input type="text" id="search-bill" placeholder="Search bill ID..." onkeyup="searchBills()">
+                    <button onclick="loadBills()" class="btn-primary">Load All</button>
+                </div>
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Bill #</th>
+                            <th>Date</th>
+                            <th>Total</th>
+                            <th>Payment</th>
+                            <th>Items</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bill-history"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/app.js"></script>
+    <script>
+        let currentMode = 'billing';
+        let cart = [];
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('user') || localStorage.getItem('role') !== 'cashier') {
+                window.location.href = 'index.html';
+            }
+            document.getElementById('user-name').textContent = localStorage.getItem('username');
+            loadBills();
+        });
+        
+        function searchItems() {
+            const search = document.getElementById('search-item').value;
+            fetch(`http://localhost:5000/api/items?search=${search}`)
+                .then(r => r.json())
+                .then(items => {
+                    const div = document.getElementById('search-results');
+                    div.innerHTML = items.map(item => `
+                        <div class="item-card" onclick="addToCart(${item.id}, '${item.name}', ${item.price}, ${item.stock_qty})">
+                            <strong>${item.name}</strong> - ₹${item.price} (Stock: ${item.stock_qty})
+                        </div>
+                    `).join('');
+                });
+        }
+        
+        function addToCart(itemId, name, price, stock) {
+            const existing = cart.find(i => i.id === itemId);
+            if (existing) {
+                if (existing.qty < stock) existing.qty++;
+            } else if (stock > 0) {
+                cart.push({id: itemId, name, price, qty: 1, stock});
+            }
+            renderCart();
+        }
+        
+        function renderCart() {
+            const tbody = document.getElementById('bill-items');
+            tbody.innerHTML = cart.map((item, idx) => `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>₹${item.price}</td>
+                    <td>
+                        <button onclick="updateQty(${idx}, -1)">-</button>
+                        ${item.qty}
+                        <button onclick="updateQty(${idx}, 1)">+</button>
+                    </td>
+                    <td>₹${item.price * item.qty}</td>
+                    <td><button onclick="removeFromCart(${idx})" class="btn-danger">✕</button></td>
+                </tr>
+            `).join('');
+            document.getElementById('bill-total').textContent = cart.reduce((s, i) => s + i.price * i.qty, 0);
+        }
+        
+        function updateQty(idx, delta) {
+            const item = cart[idx];
+            const newQty = item.qty + delta;
+            if (newQty > 0 && newQty <= item.stock) {
+                item.qty = newQty;
+                renderCart();
+            }
+        }
+        
+        function removeFromCart(idx) {
+            cart.splice(idx, 1);
+            renderCart();
+        }
+        
+        function submitBill() {
+            if (cart.length === 0) return alert('Cart is empty!');
+            const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+            const user = JSON.parse(localStorage.getItem('user'));
+            
+            fetch('http://localhost:5000/api/bills', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    cashier_id: user.id,
+                    items: cart,
+                    total_amount: total,
+                    payment_method: document.getElementById('payment-method').value
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Bill completed successfully!');
+                    cart = [];
+                    renderCart();
+                    loadBills();
+                }
+            });
+        }
+        
+        function loadBills() {
+            const search = document.getElementById('search-bill').value;
+            fetch(`http://localhost:5000/api/bills?search=${search}`)
+                .then(r => r.json())
+                .then(bills => {
+                    document.getElementById('bill-history').innerHTML = bills.map(b => `
+                        <tr>
+                            <td>#${b.id}</td>
+                            <td>${new Date(b.created_at).toLocaleString()}</td>
+                            <td>₹${b.total_amount}</td>
+                            <td>${b.payment_method}</td>
+                            <td>${b.items.length} items</td>
+                        </tr>
+                    `).join('');
+                });
+        }
+        
+        function searchBills() {
+            loadBills();
+        }
+        
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

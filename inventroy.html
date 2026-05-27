@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Mode - Shop POS</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">📦 Shop POS - Inventory</div>
+        <div class="nav-user">
+            <span id="user-name"></span>
+            <button onclick="logout()" class="btn-secondary">Logout</button>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="section">
+            <h2><i class="fas fa-plus-circle"></i> Add New Item</h2>
+            <form onsubmit="addItem(event)" class="form-grid">
+                <input type="text" id="item-name" placeholder="Item Name" required>
+                <input type="number" id="item-price" placeholder="Price (₹)" step="0.01" required>
+                <input type="number" id="item-stock" placeholder="Initial Stock" required>
+                <input type="text" id="item-category" placeholder="Category">
+                <button type="submit" class="btn-primary">Add Item & Generate QR</button>
+            </form>
+        </div>
+        
+        <div class="section">
+            <h2><i class="fas fa-list"></i> All Items</h2>
+            <div class="search-box">
+                <input type="text" id="search-item" placeholder="Search items..." onkeyup="searchItems()">
+                <button onclick="loadItems()" class="btn-primary">Refresh</button>
+            </div>
+            <table class="inventory-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Category</th>
+                        <th>QR Code</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="item-list"></tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2><i class="fas fa-history"></i> Stock History</h2>
+            <div class="search-box">
+                <select id="filter-item" onchange="loadStockHistory()">
+                    <option value="">All Items</option>
+                </select>
+                <button onclick="loadStockHistory()" class="btn-primary">Load History</button>
+            </div>
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Type</th>
+                        <th>Change</th>
+                        <th>Reason</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="stock-history"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script src="js/app.js"></script>
+    <script>
+        let currentMode = 'inventory';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('user') || localStorage.getItem('role') !== 'admin') {
+                window.location.href = 'index.html';
+            }
+            document.getElementById('user-name').textContent = localStorage.getItem('username');
+            loadItems();
+            loadStockHistory();
+        });
+        
+        function addItem(e) {
+            e.preventDefault();
+            const user = JSON.parse(localStorage.getItem('user'));
+            const data = {
+                name: document.getElementById('item-name').value,
+                price: parseFloat(document.getElementById('item-price').value),
+                stock_qty: parseInt(document.getElementById('item-stock').value),
+                category: document.getElementById('item-category').value || 'General',
+                user_id: user.id
+            };
+            
+            fetch('http://localhost:5000/api/items', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Item added successfully! QR Code: ' + data.item.qr_code);
+                    e.target.reset();
+                    loadItems();
+                }
+            });
+        }
+        
+        function loadItems() {
+            fetch('http://localhost:5000/api/items')
+                .then(r => r.json())
+                .then(items => {
+                    document.getElementById('item-list').innerHTML = items.map(item => `
+                        <tr>
+                            <td>${item.id}</td>
+                            <td>${item.name}</td>
+                            <td>₹${item.price}</td>
+                            <td>${item.stock_qty}</td>
+                            <td>${item.category}</td>
+                            <td><img src="http://localhost:5000/api/qr/${item.qr_code}" width="50"></td>
+                            <td>
+                                <button onclick="editItem(${item.id})" class="btn-warning">Edit Stock</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                    
+                    const select = document.getElementById('filter-item');
+                    select.innerHTML = '<option value="">All Items</option>' + 
+                        items.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+                });
+        }
+        
+        function searchItems() {
+            const search = document.getElementById('search-item').value;
+            fetch(`http://localhost:5000/api/items?search=${search}`)
+                .then(r => r.json())
+                .then(items => {
+                    document.getElementById('item-list').innerHTML = items.map(item => `
+                        <tr>
+                            <td>${item.id}</td>
+                            <td>${item.name}</td>
+                            <td>₹${item.price}</td>
+                            <td>${item.stock_qty}</td>
+                            <td>${item.category}</td>
+                            <td><img src="http://localhost:5000/api/qr/${item.qr_code}" width="50"></td>
+                            <td><button onclick="editItem(${item.id})" class="btn-warning">Edit Stock</button></td>
+                        </tr>
+                    `).join('');
+                });
+        }
+        
+        function editItem(itemId) {
+            const newStock = prompt("Enter new stock quantity:");
+            if (newStock) {
+                const user = JSON.parse(localStorage.getItem('user'));
+                fetch(`http://localhost:5000/api/items/${itemId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        stock_qty: parseInt(newStock),
+                        reason: 'Manual adjustment',
+                        user_id: user.id
+                    })
+                })
+                .then(r => r.json())
+                .then(() => {
+                    alert('Stock updated successfully!');
+                    loadItems();
+                    loadStockHistory();
+                });
+            }
+        }
+        
+        function loadStockHistory() {
+            const itemId = document.getElementById('filter-item').value;
+            let url = 'http://localhost:5000/api/stock-history';
+            if (itemId) url += `?item_id=${itemId}`;
+            
+            fetch(url)
+                .then(r => r.json())
+                .then(history => {
+                    document.getElementById('stock-history').innerHTML = history.map(h => `
+                        <tr>
+                            <td>${h.item_name}</td>
+                            <td><span class="${h.change_type === 'add' ? 'text-success' : 'text-danger'}">${h.change_type.toUpperCase()}</span></td>
+                            <td>${h.quantity_change > 0 ? '+' : ''}${h.quantity_change}</td>
+                            <td>${h.reason}</td>
+                            <td>${new Date(h.timestamp).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                });
+        }
+        
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

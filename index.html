@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shop POS System - Login</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>🛒 Shop POS System</h1>
+            <p>4th Semester External Project</p>
+        </div>
+        
+        <div class="mode-selection">
+            <h2>Select Your Mode</h2>
+            <div class="mode-cards">
+                <div class="mode-card" onclick="selectMode('billing')">
+                    <div class="icon">💳</div>
+                    <h3>Billing Mode</h3>
+                    <p>Make bills, check history, scan QR</p>
+                </div>
+                <div class="mode-card" onclick="selectMode('inventory')">
+                    <div class="icon">📦</div>
+                    <h3>Inventory Mode</h3>
+                    <p>Manage stock, generate QR, view history</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="login-form" class="login-form hidden">
+            <h2 id="mode-title">Login</h2>
+            <form onsubmit="handleLogin(event)">
+                <input type="text" id="username" placeholder="Username" required>
+                <input type="password" id="password" placeholder="Password" required>
+                <input type="hidden" id="selected-role">
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+            <p class="hint">Default: cashier/cashier123 or admin/admin123</p>
+        </div>
+    </div>
+    
+    <script src="js/app.js"></script>
+</body>
+</html>
